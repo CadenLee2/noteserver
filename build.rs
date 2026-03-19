@@ -38,9 +38,9 @@ pub async fn setup_schemas(pool: &Pool<Postgres>) {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS token(
+            unlocks_directory_id TEXT references directory(id),
             tok TEXT PRIMARY KEY,
-            created DATE NOT NULL,
-            unlocks_directory_id TEXT references directory(id)
+            created DATE NOT NULL DEFAULT CURRENT_DATE
         );
         "#,
     )

@@ -3,17 +3,18 @@ use axum::response::{Html, IntoResponse, Response};
 
 use crate::rendering;
 
-pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String) -> StatusCode {
+pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String, protected: bool) -> StatusCode {
     match sqlx::query!(
         r#"
         INSERT INTO directory
-        (id, description)
-        VALUES ($1, $2)
+        (id, description, protected)
+        VALUES ($1, $2, $3)
         ON CONFLICT (id) DO UPDATE
         SET description = EXCLUDED.description;
     "#,
         id,
         description,
+        protected,
     )
     .fetch_all(pool)
     .await
@@ -40,6 +41,47 @@ pub async fn create_note(
         dir,
         id,
         contents,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn create_token(
+    pool: &sqlx::PgPool,
+    token: String,
+    dir: String,
+) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        INSERT INTO token
+        (unlocks_directory_id, tok)
+        VALUES ($1, $2);
+    "#,
+        dir,
+        token,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn delete_token(
+    pool: &sqlx::PgPool,
+    token: String,
+) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        DELETE FROM token
+        WHERE tok = $1;
+    "#,
+        token,
     )
     .fetch_all(pool)
     .await

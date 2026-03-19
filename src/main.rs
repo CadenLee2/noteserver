@@ -6,7 +6,7 @@ use axum::{
         header::{self, HeaderMap},
     },
     response::{Html, Response},
-    routing::{get, post},
+    routing::{get, post, delete},
 };
 
 use serde::Deserialize;
@@ -43,6 +43,8 @@ async fn main() {
 
     // TODO: delete
     let app = Router::new()
+        .route("/token/{tok}", post(post_token))
+        .route("/token/{tok}", delete(delete_token))
         .route("/{dir}", post(post_dir))
         .route("/{dir}/{note}", post(post_note))
         .route("/{dir}", get(get_dir))
@@ -71,8 +73,14 @@ fn valid_auth(headers: &HeaderMap) -> bool {
     }
 }
 
+#[derive(Deserialize)]
+struct DirDetails {
+    protected: Option<bool>
+}
+
 // TODO: secure routes with auth
 async fn post_dir(
+    Query(query): Query<DirDetails>,
     Path(dir): Path<String>,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
@@ -81,7 +89,8 @@ async fn post_dir(
     if !valid_auth(&headers) {
         return StatusCode::UNAUTHORIZED;
     }
-    utils::create_dir(&state.db_pool, dir, body).await
+    let protected = query.protected.unwrap_or(false);
+    utils::create_dir(&state.db_pool, dir, body, protected).await
 }
 
 // TODO: secure routes with auth
@@ -97,6 +106,34 @@ async fn post_note(
     utils::create_note(&state.db_pool, dir, id, body).await
 }
 
+#[derive(Deserialize)]
+struct TokenDetails {
+    directory: String,
+}
+
+async fn post_token(
+    Query(query): Query<TokenDetails>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    utils::create_token(&state.db_pool, token, query.directory).await
+}
+
+async fn delete_token(
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    utils::delete_token(&state.db_pool, token).await
+}
+
 async fn get_dir(Path(dir): Path<String>, State(state): State<Arc<AppState>>) -> Html<String> {
     utils::get_dir(&state.db_pool, dir).await
 }
@@ -107,10 +144,10 @@ struct NoteRaw {
 }
 
 async fn get_note(
-    q: Query<NoteRaw>,
+    Query(query): Query<NoteRaw>,
     Path((dir, id)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    let raw = q.0.raw.unwrap_or(false);
+    let raw = query.raw.unwrap_or(false);
     utils::get_note(&state.db_pool, dir, id, raw).await
 }
