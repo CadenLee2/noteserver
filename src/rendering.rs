@@ -75,13 +75,13 @@ pub fn error_page(error: &str) -> String {
 "#, front_matter("Notes"), error)
 }
 
+const MISC_DIR_ID: &str = "misc";
+
 pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<String>) -> String {
     let dir_descr_elem = match description {
         Some(d) => format!("<p>{}</p>", d),
         None => String::new(),
     };
-
-    const MISC_DIR_ID: &str = "misc";
 
     if dir == MISC_DIR_ID {
         return format!(
@@ -134,6 +134,15 @@ pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
 
     let note_title = format!("{} ({})", note, dir);
 
+    let return_options = if dir == MISC_DIR_ID {
+        String::new()
+    } else {
+        format!(r#"
+            <hr id="end">
+            <a id="return-to-dir" href="/{}">Return to directory {}</a>
+        "#, dir, dir)
+    };
+
     format!(
         r#"
 <!DOCTYPE html>
@@ -142,12 +151,11 @@ pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
 <body>
     <div>
         {}
-        <hr id="end">
-        <a id="return-to-dir" href="/{}">Return to directory {}</a>
+        {}
     </div>
 </body>
 </html>
 "#,
-        front_matter(&note_title), md_as_html, dir, dir
+        front_matter(&note_title), md_as_html, return_options
     )
 }
