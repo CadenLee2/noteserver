@@ -6,7 +6,9 @@ pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String) ->
         r#"
         INSERT INTO directory
         (id, description)
-        VALUES ($1, $2);
+        VALUES ($1, $2)
+        ON CONFLICT (id) DO UPDATE
+        SET description = EXCLUDED.description;
     "#,
         id,
         description,
@@ -29,7 +31,9 @@ pub async fn create_note(
         r#"
         INSERT INTO note
         (directory_id, id, md_contents)
-        VALUES ($1, $2, $3);
+        VALUES ($1, $2, $3)
+        ON CONFLICT (directory_id, id) DO UPDATE
+        SET md_contents = EXCLUDED.md_contents;
     "#,
         dir,
         id,
