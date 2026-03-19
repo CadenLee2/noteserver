@@ -44,6 +44,21 @@ a:hover {
     cursor: pointer;
 }
 
+pre, code {
+    background-color: #c9c9cc;
+    color: #3c3c42;
+}
+
+pre {
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+code {
+    border-radius: 4px;
+    padding: 0px 2px;
+}
+
 .actions {
     color: #797b7d;
 }
@@ -72,8 +87,10 @@ pub fn error_page(error: &str) -> String {
 <html>
 {}
 <body>
-    <h1>404 Error</h1>
-    <p>{}</p>
+    <div style="text-align:center;">
+        <h1>404</h1>
+        <p>{}</p>
+    </div>
 </body>
 </html>
 "#, front_matter("Notes"), error)
@@ -134,7 +151,7 @@ pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<Stri
 }
 
 pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
-    let md_as_html = markdown::to_html(md_contents);
+    let md_as_html = markdown::to_html_with_options(md_contents, &markdown::Options::gfm()).unwrap();
 
     let note_title = format!("{} ({})", note, dir);
 

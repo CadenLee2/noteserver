@@ -46,6 +46,7 @@ async fn main() {
         .route("/{dir}", post(post_dir))
         .route("/{dir}/{note}", post(post_note))
         .route("/{dir}", get(get_dir))
+        .route("/{dir}/", get(get_dir))
         .route("/{dir}/{note}", get(get_note))
         .with_state(state);
 
