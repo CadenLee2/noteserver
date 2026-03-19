@@ -25,7 +25,7 @@ pub async fn setup_schemas(pool: &Pool<Postgres>) {
         CREATE TABLE IF NOT EXISTS note(
             directory_id TEXT references directory(id),
             id TEXT NOT NULL,
-            md_contents TEXT,
+            md_contents TEXT NOT NULL,
             PRIMARY KEY (directory_id, id)
         );
         "#,
