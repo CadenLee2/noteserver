@@ -1,7 +1,10 @@
 use axum::{
     Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{
+        StatusCode,
+        header::{self, HeaderMap},
+    },
     response::Html,
     routing::{get, post},
 };
@@ -11,6 +14,8 @@ use std::sync::Arc;
 
 mod config;
 mod utils;
+
+use noteserver::auth;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -53,21 +58,39 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+fn valid_auth(headers: &HeaderMap) -> bool {
+    match headers.get(header::AUTHORIZATION).cloned() {
+        Some(val) => match val.to_str() {
+            Ok(pw) => auth::is_authorized(pw),
+            _ => false,
+        },
+        None => false,
+    }
+}
+
 // TODO: secure routes with auth
 async fn post_dir(
     Path(dir): Path<String>,
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     body: String,
 ) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
     utils::create_dir(&state.db_pool, dir, body).await
 }
 
 // TODO: secure routes with auth
 async fn post_note(
     Path((dir, id)): Path<(String, String)>,
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     body: String,
 ) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
     utils::create_note(&state.db_pool, dir, id, body).await
 }
 

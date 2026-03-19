@@ -12,7 +12,9 @@ This project is still in progress.
 - (coming soon)
 
 ## Development
-- Copy `.env.example` into `.env` and ensure you have a PostgreSQL database URL set
+- Copy `.env.example` into `.env`
+    - Ensure you have a PostgreSQL database URL set
+    - A utility is provided for hashing your password
 - `cargo run`
     - The database schema will be populated at build time
 
