@@ -2,5 +2,15 @@
 name = "noteserver"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
+
+[build-dependencies]
+dotenvy = "0.15.7"
+sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }
 
 [dependencies]
+axum = "0.8.8"
+dotenvy = "0.15.7"
+sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }

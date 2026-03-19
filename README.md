@@ -14,6 +14,7 @@ This project is still in progress.
 ## Development
 - Copy `.env.example` into `.env` and ensure you have a PostgreSQL database URL set
 - `cargo run`
+    - The database schema will be populated at build time
 
 ## Motivations
 
