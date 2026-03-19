@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 mod config;
 mod utils;
+mod rendering;
 
 use noteserver::auth;
 

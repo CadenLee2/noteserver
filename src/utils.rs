@@ -1,6 +1,8 @@
 use axum::http::StatusCode;
 use axum::response::Html;
 
+use crate::rendering;
+
 pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String) -> StatusCode {
     match sqlx::query!(
         r#"
@@ -58,17 +60,6 @@ struct DirectoryMetadata {
     description: Option<String>,
 }
 
-// TODO: move constant to rendering folder and add og
-const ERROR_PAGE: &str = r#"
-<!DOCTYPE html>
-<html>
-<body>
-    <h1>404 Error</h1>
-    <p>The resource could not be found</p>
-</body>
-</html> 
-"#;
-
 pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     let dir_data = match sqlx::query_as!(
         DirectoryMetadata,
@@ -84,11 +75,11 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     {
         // TODO: refactor this to "or error page"
         Ok(rows) => rows,
-        Err(_) => return Html(ERROR_PAGE.to_string()),
+        Err(_) => return Html(rendering::error_page("Error fetching directory")),
     };
 
     if dir_data.is_empty() {
-        return Html(ERROR_PAGE.to_string());
+        return Html(rendering::error_page("Directory not found"));
     }
 
     let notes = match sqlx::query_as!(
@@ -104,7 +95,7 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     .await
     {
         Ok(rows) => rows,
-        Err(_) => return Html(ERROR_PAGE.to_string()),
+        Err(_) => return Html(rendering::error_page("Directory not found")),
     };
 
     // TODO: also get description from dir table
@@ -112,33 +103,8 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     let mut note_titles = notes.iter().map(|n| n.id.clone()).collect::<Vec<String>>();
     note_titles.sort();
 
-    let note_list = note_titles
-        .iter()
-        .map(|n| format!("<li>{}</li>", n))
-        .collect::<String>();
-
-    let dir_descr_elem = match &dir_data[0].description {
-        Some(d) => format!("<p>{}</p>", d),
-        None => String::new(),
-    };
-
-    let dir_template = format!(
-        r#"
-<!DOCTYPE html>
-<html>
-<body>
-    <h1>Notes directory: {}</h1>
-    {}
-    <ul>
-    {}
-    </ul>
-</body>
-</html> 
-"#,
-        dir, dir_descr_elem, note_list
-    );
-
-    Html(dir_template)
+    let description = &dir_data[0].description;
+    Html(rendering::directory(&dir, &note_titles, description))
 }
 
 pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String) -> Html<String> {
@@ -156,25 +122,8 @@ pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String) -> Html<St
     .await
     {
         Ok(rows) => rows,
-        Err(_) => return Html(ERROR_PAGE.to_string()),
+        Err(_) => return Html(rendering::error_page("Note not found")),
     };
 
-    // TODO: convert
-    let md_as_html = note_contents.md_contents;
-
-    let dir_template = format!(
-        r#"
-<!DOCTYPE html>
-<html>
-<body>
-    <h1>{}</h1>
-    {}
-    <h1><a href="/{}">Return to directory {}</a></h1>
-</body>
-</html> 
-"#,
-        note, md_as_html, dir, dir
-    );
-
-    Html(dir_template)
+    Html(rendering::note(&dir, &note, &note_contents.md_contents))
 }
