@@ -44,6 +44,10 @@ a:hover {
     cursor: pointer;
 }
 
+.actions {
+    color: #797b7d;
+}
+
 hr {
     border: solid 1px #babdc1;
     margin-top: 40px;
@@ -134,14 +138,13 @@ pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
 
     let note_title = format!("{} ({})", note, dir);
 
-    let return_options = if dir == MISC_DIR_ID {
-        String::new()
-    } else {
-        format!(r#"
-            <hr id="end">
-            <a id="return-to-dir" href="/{}">Return to directory {}</a>
-        "#, dir, dir)
-    };
+    let mut actions: Vec<String> = Vec::new();
+    if dir != MISC_DIR_ID {
+        actions.push(format!("<a href=\"/{}\">Return to directory {}</a> • ", dir, dir));
+    }
+    actions.push(format!("<a href=\"/{}/{}?raw=true\">Raw</a>", dir, note));
+
+    let actions_str = actions.iter().map(|o| o.to_string()).collect::<String>();
 
     format!(
         r#"
@@ -151,11 +154,12 @@ pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
 <body>
     <div>
         {}
-        {}
+        <hr id="end">
+        <div class="actions">{}</div>
     </div>
 </body>
 </html>
 "#,
-        front_matter(&note_title), md_as_html, return_options
+        front_matter(&note_title), md_as_html, actions_str
     )
 }

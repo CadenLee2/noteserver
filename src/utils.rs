@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use axum::response::Html;
+use axum::response::{Html, Response, IntoResponse};
 
 use crate::rendering;
 
@@ -107,7 +107,7 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     Html(rendering::directory(&dir, &note_titles, description))
 }
 
-pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String) -> Html<String> {
+pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String, raw: bool) -> Response {
     let note_contents = match sqlx::query_as!(
         NoteContents,
         r#"
@@ -122,8 +122,12 @@ pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String) -> Html<St
     .await
     {
         Ok(rows) => rows,
-        Err(_) => return Html(rendering::error_page("Note not found")),
+        Err(_) => return Html(rendering::error_page("Note not found")).into_response(),
     };
 
-    Html(rendering::note(&dir, &note, &note_contents.md_contents))
+    if raw {
+        note_contents.md_contents.into_response()
+    } else {
+        Html(rendering::note(&dir, &note, &note_contents.md_contents)).into_response()
+    }
 }

@@ -1,16 +1,17 @@
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, State, Query},
     http::{
         StatusCode,
         header::{self, HeaderMap},
     },
-    response::Html,
+    response::{Html, Response},
     routing::{get, post},
 };
 
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
+use serde::Deserialize;
 
 mod config;
 mod utils;
@@ -99,9 +100,16 @@ async fn get_dir(Path(dir): Path<String>, State(state): State<Arc<AppState>>) ->
     utils::get_dir(&state.db_pool, dir).await
 }
 
+#[derive(Deserialize)]
+struct NoteRaw {
+    raw: Option<bool>
+}
+
 async fn get_note(
+    q: Query<NoteRaw>,
     Path((dir, id)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
-) -> Html<String> {
-    utils::get_note(&state.db_pool, dir, id).await
+) -> Response {
+    let raw = q.0.raw.unwrap_or(false);
+    utils::get_note(&state.db_pool, dir, id, raw).await
 }

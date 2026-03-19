@@ -794,6 +794,7 @@ dependencies = [
  "dotenvy",
  "markdown",
  "rand_core",
+ "serde",
  "sqlx",
  "tokio",
 ]
