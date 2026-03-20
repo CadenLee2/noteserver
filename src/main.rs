@@ -6,8 +6,10 @@ use axum::{
         header::{self, HeaderMap},
     },
     response::{Html, Response},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
 };
+
+use axum_extra::extract::cookie::{Cookie, CookieJar};
 
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
@@ -75,7 +77,7 @@ fn valid_auth(headers: &HeaderMap) -> bool {
 
 #[derive(Deserialize)]
 struct DirDetails {
-    protected: Option<bool>
+    protected: Option<bool>,
 }
 
 async fn post_dir(
@@ -132,6 +134,15 @@ async fn delete_token(
     utils::delete_token(&state.db_pool, token).await
 }
 
+fn get_token_from_jar(jar: &CookieJar, cookie_name: &str) -> Option<String> {
+    let cookie_gotten = jar.get(cookie_name).cloned();
+    cookie_gotten.map(|cookie| cookie.value().to_string())
+}
+
+fn get_cookie_name(dir: &str) -> String {
+    format!("tok-{}", dir)
+}
+
 #[derive(Deserialize)]
 struct GetDirQuery {
     tok: Option<String>,
@@ -140,10 +151,16 @@ struct GetDirQuery {
 async fn get_dir(
     Query(query): Query<GetDirQuery>,
     Path(dir): Path<String>,
-    State(state): State<Arc<AppState>>
-) -> Html<String> {
-    // TODO: handle cookie stuff
-    utils::get_dir(&state.db_pool, dir, query.tok).await
+    jar: CookieJar,
+    State(state): State<Arc<AppState>>,
+) -> (CookieJar, Html<String>) {
+    let cookie_name = get_cookie_name(&dir);
+    let new_jar = match &query.tok {
+        Some(tok) => jar.add(Cookie::new(cookie_name.clone(), tok.clone())),
+        None => jar,
+    };
+    let tok = get_token_from_jar(&new_jar, &cookie_name);
+    (new_jar, utils::get_dir(&state.db_pool, dir, tok).await)
 }
 
 #[derive(Deserialize)]
@@ -154,8 +171,11 @@ struct NoteRaw {
 async fn get_note(
     Query(query): Query<NoteRaw>,
     Path((dir, id)): Path<(String, String)>,
+    jar: CookieJar,
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let raw = query.raw.unwrap_or(false);
-    utils::get_note(&state.db_pool, dir, id, raw).await
+    let cookie_name = get_cookie_name(&dir);
+    let tok = get_token_from_jar(&jar, &cookie_name);
+    utils::get_note(&state.db_pool, dir, id, raw, tok).await
 }

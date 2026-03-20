@@ -3,7 +3,12 @@ use axum::response::{Html, IntoResponse, Response};
 
 use crate::rendering;
 
-pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String, protected: bool) -> StatusCode {
+pub async fn create_dir(
+    pool: &sqlx::PgPool,
+    id: String,
+    description: String,
+    protected: bool,
+) -> StatusCode {
     match sqlx::query!(
         r#"
         INSERT INTO directory
@@ -50,11 +55,7 @@ pub async fn create_note(
     }
 }
 
-pub async fn create_token(
-    pool: &sqlx::PgPool,
-    token: String,
-    dir: String,
-) -> StatusCode {
+pub async fn create_token(pool: &sqlx::PgPool, token: String, dir: String) -> StatusCode {
     match sqlx::query!(
         r#"
         INSERT INTO token
@@ -72,10 +73,7 @@ pub async fn create_token(
     }
 }
 
-pub async fn delete_token(
-    pool: &sqlx::PgPool,
-    token: String,
-) -> StatusCode {
+pub async fn delete_token(pool: &sqlx::PgPool, token: String) -> StatusCode {
     match sqlx::query!(
         r#"
         DELETE FROM token
@@ -119,12 +117,11 @@ async fn is_valid_token(pool: &sqlx::PgPool, dir: &str, token: &str) -> bool {
         Ok(rows) => rows,
         Err(_) => return false,
     };
-    let token_exists = !token_info.is_empty();
-    token_exists
+    !token_info.is_empty()
 }
 
-pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>) -> Html<String> {
-    let dir_data = match sqlx::query_as!(
+async fn get_dir_metadata(pool: &sqlx::PgPool, dir: &str) -> Option<DirectoryMetadata> {
+    sqlx::query_as!(
         DirectoryMetadata,
         r#"
         SELECT description, protected
@@ -133,24 +130,21 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>) ->
     "#,
         dir,
     )
-    .fetch_all(pool)
+    .fetch_one(pool)
     .await
-    {
-        // TODO: refactor this to "or error page"
-        Ok(rows) => rows,
-        Err(_) => return Html(rendering::error_page("Error fetching directory")),
+    .ok()
+}
+
+pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>) -> Html<String> {
+    let target_dir = match get_dir_metadata(pool, &dir).await {
+        Some(res) => res,
+        None => return Html(rendering::error_page("Directory not found")),
     };
-
-    if dir_data.is_empty() {
-        return Html(rendering::error_page("Directory not found"));
-    }
-
-    let target_dir = &dir_data[0];
 
     let valid_auth = if target_dir.protected.unwrap_or(false) {
         match token {
             Some(tok) => is_valid_token(pool, &dir, &tok).await,
-            None => false
+            None => false,
         }
     } else {
         true
@@ -185,7 +179,31 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>) ->
     Html(rendering::directory(&dir, &note_titles, description))
 }
 
-pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String, raw: bool) -> Response {
+pub async fn get_note(
+    pool: &sqlx::PgPool,
+    dir: String,
+    note: String,
+    raw: bool,
+    token: Option<String>,
+) -> Response {
+    let target_dir = match get_dir_metadata(pool, &dir).await {
+        Some(res) => res,
+        None => return Html(rendering::error_page("Note not found")).into_response(),
+    };
+
+    let valid_auth = if target_dir.protected.unwrap_or(false) {
+        match token {
+            Some(tok) => is_valid_token(pool, &dir, &tok).await,
+            None => false,
+        }
+    } else {
+        true
+    };
+
+    if !valid_auth {
+        return Html(rendering::error_page("Note not found")).into_response();
+    }
+
     let note_contents = match sqlx::query_as!(
         NoteContents,
         r#"
