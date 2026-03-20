@@ -216,8 +216,22 @@ pub fn directory(
     )
 }
 
+fn to_valid_descr_char(c: char) -> char {
+    if c == '"' {
+        '\''
+    } else if c.is_whitespace() || c == '>' || c == '<' || c == '&' {
+        ' '
+    } else {
+        c
+    }
+}
+
 fn descr_from_contents(md_contents: &str) -> String {
-    let start = md_contents.chars().take(60).filter(|c| c.is_ascii()).collect::<String>();
+    let start = md_contents
+        .chars()
+        .take(60)
+        .map(to_valid_descr_char)
+        .collect::<String>();
     if start.chars().count() < md_contents.chars().count() {
         start + "..."
     } else {
