@@ -125,6 +125,26 @@ pub fn error_page(error: &str) -> String {
 
 const MISC_DIR_ID: &str = "misc";
 
+pub fn root() -> String {
+    format!(
+        r#"
+<!DOCTYPE html>
+<html>
+{}
+<body>
+    <div>
+        <h1>Notes</h1>
+        <p>
+            Self-hosted markdown notes. See the <a href="https://github.com/Cadecraft/noteserver">GitHub repository</a> for more information.
+        </p>
+    </div>
+</body>
+</html>
+"#,
+        front_matter("Notes")
+    )
+}
+
 pub fn directory(
     dir: &str,
     note_titles: &[String],

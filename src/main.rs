@@ -45,6 +45,7 @@ async fn main() {
         .route("/token/{tok}", delete(delete_token))
         .route("/{dir}", post(post_dir))
         .route("/{dir}/{note}", post(post_note))
+        .route("/", get(get_root))
         .route("/{dir}", get(get_dir))
         .route("/{dir}/", get(get_dir))
         .route("/{dir}/{note}", get(get_note))
@@ -118,6 +119,10 @@ async fn delete_token(
         return StatusCode::UNAUTHORIZED;
     }
     actions::delete_token(&state.db_pool, token).await
+}
+
+async fn get_root() -> Response {
+    actions::get_root().into_response()
 }
 
 #[derive(Deserialize)]

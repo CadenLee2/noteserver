@@ -133,6 +133,10 @@ async fn get_dir_metadata(pool: &sqlx::PgPool, dir: &str) -> Option<DirectoryMet
     .ok()
 }
 
+pub fn get_root() -> Html<String> {
+    Html(rendering::root())
+}
+
 pub async fn get_dir(
     pool: &sqlx::PgPool,
     dir: String,

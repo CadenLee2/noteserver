@@ -16,20 +16,14 @@ pub fn refresh_cookie_expiry(jar: &CookieJar) -> CookieJar {
 
 pub fn make_expiring_cookie<'a>(name: &str, val: &str) -> Cookie<'a> {
     let expires_at = OffsetDateTime::now_utc() + Duration::days(30);
-    let c = Cookie::build((name.to_string(), val.to_string()))
+    Cookie::build((name.to_string(), val.to_string()))
         .expires(expires_at)
         .http_only(true)
-        .build();
-
-    println!("[dbg] built cookie expires {:?}", c.expires());
-    c
+        .build()
 }
 
 pub fn get_cookie_from_jar(jar: &CookieJar, cookie_name: &str) -> Option<String> {
     let cookie_gotten = jar.get(cookie_name).cloned();
-    if let Some(c) = cookie_gotten.clone() {
-        println!("[dbg] cookie expires {:?}", c.expires());
-    }
     cookie_gotten.map(|cookie| cookie.value().to_string())
 }
 
