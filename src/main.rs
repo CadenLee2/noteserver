@@ -5,7 +5,7 @@ use axum::{
         StatusCode,
         header::{self, HeaderMap},
     },
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
 
@@ -144,7 +144,7 @@ fn get_token_cookie_name(dir: &str) -> String {
 }
 
 fn is_dark_theme(jar: &CookieJar) -> bool {
-    let darktheme = get_cookie_from_jar(&jar, "theme").unwrap_or(String::from("light"));
+    let darktheme = get_cookie_from_jar(jar, "theme").unwrap_or(String::from("light"));
     darktheme == "dark"
 }
 
@@ -158,15 +158,25 @@ async fn get_dir(
     Path(dir): Path<String>,
     jar: CookieJar,
     State(state): State<Arc<AppState>>,
-) -> (CookieJar, Html<String>) {
+) -> Response {
     let token_cookie_name = get_token_cookie_name(&dir);
-    let new_jar = match &query.tok {
-        Some(tok) => jar.add(Cookie::new(token_cookie_name.clone(), tok.clone())),
-        None => jar,
+    if let Some(tok) = &query.tok {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::LOCATION, format!("/{}", dir).parse().unwrap());
+        return (
+            StatusCode::TEMPORARY_REDIRECT,
+            headers,
+            jar.add(Cookie::new(token_cookie_name.clone(), tok.clone())),
+        )
+            .into_response();
     };
-    let tok = get_cookie_from_jar(&new_jar, &token_cookie_name);
-    let use_dark = is_dark_theme(&new_jar);
-    (new_jar, utils::get_dir(&state.db_pool, dir, tok, use_dark).await)
+    let tok = get_cookie_from_jar(&jar, &token_cookie_name);
+    let use_dark = is_dark_theme(&jar);
+    (
+        jar,
+        utils::get_dir(&state.db_pool, dir, tok, use_dark).await,
+    )
+        .into_response()
 }
 
 #[derive(Deserialize)]
@@ -182,20 +192,25 @@ async fn get_note(
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let raw = query.raw.unwrap_or(false);
-    match &query.theme {
-        Some(theme) => {
-            let mut headers = HeaderMap::new();
-            headers.insert(header::LOCATION, format!("/{}/{}", dir, id).parse().unwrap());
-            return (
-                StatusCode::TEMPORARY_REDIRECT,
-                headers,
-                jar.add(Cookie::new("theme", theme.clone())),
-            ).into_response();
-        },
-        None => ()
+    if let Some(theme) = &query.theme {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::LOCATION,
+            format!("/{}/{}", dir, id).parse().unwrap(),
+        );
+        return (
+            StatusCode::TEMPORARY_REDIRECT,
+            headers,
+            jar.add(Cookie::new("theme", theme.clone())),
+        )
+            .into_response();
     };
     let token_cookie_name = get_token_cookie_name(&dir);
     let tok = get_cookie_from_jar(&jar, &token_cookie_name);
     let use_dark = is_dark_theme(&jar);
-    (jar, utils::get_note(&state.db_pool, dir, id, raw, tok, use_dark).await).into_response()
+    (
+        jar,
+        utils::get_note(&state.db_pool, dir, id, raw, tok, use_dark).await,
+    )
+        .into_response()
 }

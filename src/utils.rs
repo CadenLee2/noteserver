@@ -135,7 +135,12 @@ async fn get_dir_metadata(pool: &sqlx::PgPool, dir: &str) -> Option<DirectoryMet
     .ok()
 }
 
-pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>, darktheme: bool) -> Html<String> {
+pub async fn get_dir(
+    pool: &sqlx::PgPool,
+    dir: String,
+    token: Option<String>,
+    darktheme: bool,
+) -> Html<String> {
     let target_dir = match get_dir_metadata(pool, &dir).await {
         Some(res) => res,
         None => return Html(rendering::error_page("Directory not found")),
@@ -176,7 +181,12 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String, token: Option<String>, da
     note_titles.sort();
 
     let description = &target_dir.description;
-    Html(rendering::directory(&dir, &note_titles, description, darktheme))
+    Html(rendering::directory(
+        &dir,
+        &note_titles,
+        description,
+        darktheme,
+    ))
 }
 
 pub async fn get_note(
@@ -225,6 +235,12 @@ pub async fn get_note(
     if raw {
         note_contents.md_contents.into_response()
     } else {
-        Html(rendering::note(&dir, &note, &note_contents.md_contents, darktheme)).into_response()
+        Html(rendering::note(
+            &dir,
+            &note,
+            &note_contents.md_contents,
+            darktheme,
+        ))
+        .into_response()
     }
 }

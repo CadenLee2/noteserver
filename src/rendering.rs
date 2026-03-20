@@ -125,7 +125,12 @@ pub fn error_page(error: &str) -> String {
 
 const MISC_DIR_ID: &str = "misc";
 
-pub fn directory(dir: &str, note_titles: &[String], description: &Option<String>, darktheme: bool) -> String {
+pub fn directory(
+    dir: &str,
+    note_titles: &[String],
+    description: &Option<String>,
+    darktheme: bool,
+) -> String {
     let dir_descr_elem = match description {
         Some(d) => format!("<p>{}</p>", d),
         None => String::new(),
@@ -198,7 +203,11 @@ pub fn note(dir: &str, note: &str, md_contents: &str, darktheme: bool) -> String
         ));
     }
     actions.push(format!("<a href=\"/{}/{}?raw=true\">Raw</a> • ", dir, note));
-    let other_theme = if darktheme { ("light", "Light") } else { ("dark", "Dark") };
+    let other_theme = if darktheme {
+        ("light", "Light")
+    } else {
+        ("dark", "Dark")
+    };
     actions.push(format!(
         "<a href=\"/{}/{}?theme={}\">{} mode</a>",
         dir, note, other_theme.0, other_theme.1
