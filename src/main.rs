@@ -6,7 +6,7 @@ use axum::{
     routing::{delete, get, post},
 };
 
-use axum_extra::extract::cookie::{Cookie, CookieJar};
+use axum_extra::extract::cookie::CookieJar;
 
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
@@ -133,19 +133,18 @@ async fn get_dir(
 ) -> Response {
     let token_cookie_name = utils::get_token_cookie_name(&dir);
     if let Some(tok) = &query.tok {
+        let new_jar = utils::refresh_cookie_expiry(&jar);
         return (
             StatusCode::TEMPORARY_REDIRECT,
             utils::make_redirect_headers(format!("/{}", dir)),
-            jar.add(Cookie::new(token_cookie_name.clone(), tok.clone())),
+            new_jar.add(utils::make_expiring_cookie(&token_cookie_name, tok)),
         )
             .into_response();
     };
     let tok = utils::get_cookie_from_jar(&jar, &token_cookie_name);
     let use_dark = utils::is_dark_theme(&jar);
-    (
-        jar,
-        actions::get_dir(&state.db_pool, dir, tok, use_dark).await,
-    )
+    actions::get_dir(&state.db_pool, dir, tok, use_dark)
+        .await
         .into_response()
 }
 
@@ -163,19 +162,16 @@ async fn get_note(
 ) -> Response {
     let raw = query.raw.unwrap_or(false);
     if let Some(theme) = &query.theme {
+        let new_jar = utils::refresh_cookie_expiry(&jar);
         return (
             StatusCode::TEMPORARY_REDIRECT,
             utils::make_redirect_headers(format!("/{}/{}", dir, id)),
-            jar.add(Cookie::new("theme", theme.clone())),
+            new_jar.add(utils::make_expiring_cookie("theme", theme)),
         )
             .into_response();
     };
     let token_cookie_name = utils::get_token_cookie_name(&dir);
     let tok = utils::get_cookie_from_jar(&jar, &token_cookie_name);
     let use_dark = utils::is_dark_theme(&jar);
-    (
-        jar,
-        actions::get_note(&state.db_pool, dir, id, raw, tok, use_dark).await,
-    )
-        .into_response()
+    actions::get_note(&state.db_pool, dir, id, raw, tok, use_dark).await
 }
