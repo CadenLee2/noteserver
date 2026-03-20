@@ -1,8 +1,28 @@
 const STYLE_RULES: &str = r#"
+html {
+    --bg: #e3e3e5;
+    --text: #1e2128;
+    --bg-pre: #c9c9cc;
+    --text-pre: #3c3c42;
+    --border: #babdc1;
+    --link: #1165aa;
+    --link-hover: #3f87c1;
+}
+
+.dark {
+    --bg: #121216;
+    --text: #d9dadd;
+    --bg-pre: #26262d;
+    --text-pre: #9c9ea8;
+    --border: #3f4149;
+    --link: #74b7db;
+    --link-hover: #83c1e2;
+}
+
 body {
     font-size: 16px;
-    background-color: #e3e3e5;
-    color: #1e2128;
+    background-color: var(--bg);
+    color: var(--text);
     font-family: 'Lora', 'Arial';
     display: flex;
     justify-content: center;
@@ -36,17 +56,17 @@ p {
 }
 
 a, a:visited {
-    color: #1165aa;
+    color: var(--link);
 }
 
 a:hover {
-    color: #3f87c1;
+    color: var(--link-hover);
     cursor: pointer;
 }
 
 pre, code {
-    background-color: #c9c9cc;
-    color: #3c3c42;
+    background-color: var(--bg-pre);
+    color: var(--text-pre);
 }
 
 pre {
@@ -64,13 +84,14 @@ code {
 }
 
 hr {
-    border: solid 1px #babdc1;
+    border: solid 1px var(--border);
     margin-top: 40px;
 }
 "#;
 
 fn front_matter(title: &str) -> String {
-    format!(r#"
+    format!(
+        r#"
 <head>
 <title>{}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora">
@@ -78,11 +99,14 @@ fn front_matter(title: &str) -> String {
 {}
 </style>
 </head>
-"#, title, STYLE_RULES)
+"#,
+        title, STYLE_RULES
+    )
 }
 
 pub fn error_page(error: &str) -> String {
-    format!(r#"
+    format!(
+        r#"
 <!DOCTYPE html>
 <html>
 {}
@@ -93,12 +117,20 @@ pub fn error_page(error: &str) -> String {
     </div>
 </body>
 </html>
-"#, front_matter("Notes"), error)
+"#,
+        front_matter("Notes"),
+        error
+    )
 }
 
 const MISC_DIR_ID: &str = "misc";
 
-pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<String>) -> String {
+pub fn directory(
+    dir: &str,
+    note_titles: &[String],
+    description: &Option<String>,
+    darktheme: bool,
+) -> String {
     let dir_descr_elem = match description {
         Some(d) => format!("<p>{}</p>", d),
         None => String::new(),
@@ -108,7 +140,7 @@ pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<Stri
         return format!(
             r#"
 <!DOCTYPE html>
-<html>
+<html class="{}">
 {}
 <body>
     <div>
@@ -121,7 +153,10 @@ pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<Stri
 </body>
 </html>
 "#,
-            front_matter(dir), dir, dir_descr_elem
+            if darktheme { "dark" } else { "" },
+            front_matter(dir),
+            dir,
+            dir_descr_elem
         );
     }
 
@@ -133,7 +168,7 @@ pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<Stri
     format!(
         r#"
 <!DOCTYPE html>
-<html>
+<html class="{}">
 {}
 <body>
     <div>
@@ -146,27 +181,44 @@ pub fn directory(dir: &str, note_titles: &Vec<String>, description: &Option<Stri
 </body>
 </html>
 "#,
-        front_matter(dir), dir, dir_descr_elem, note_list
+        if darktheme { "dark" } else { "" },
+        front_matter(dir),
+        dir,
+        dir_descr_elem,
+        note_list
     )
 }
 
-pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
-    let md_as_html = markdown::to_html_with_options(md_contents, &markdown::Options::gfm()).unwrap();
+pub fn note(dir: &str, note: &str, md_contents: &str, darktheme: bool) -> String {
+    let md_as_html =
+        markdown::to_html_with_options(md_contents, &markdown::Options::gfm()).unwrap();
 
     let note_title = format!("{} ({})", note, dir);
 
     let mut actions: Vec<String> = Vec::new();
     if dir != MISC_DIR_ID {
-        actions.push(format!("<a href=\"/{}\">Return to directory {}</a> • ", dir, dir));
+        actions.push(format!(
+            "<a href=\"/{}\">Return to directory {}</a> • ",
+            dir, dir
+        ));
     }
-    actions.push(format!("<a href=\"/{}/{}?raw=true\">Raw</a>", dir, note));
+    actions.push(format!("<a href=\"/{}/{}?raw=true\">Raw</a> • ", dir, note));
+    let other_theme = if darktheme {
+        ("light", "Light")
+    } else {
+        ("dark", "Dark")
+    };
+    actions.push(format!(
+        "<a href=\"/{}/{}?theme={}\">{} mode</a>",
+        dir, note, other_theme.0, other_theme.1
+    ));
 
     let actions_str = actions.iter().map(|o| o.to_string()).collect::<String>();
 
     format!(
         r#"
 <!DOCTYPE html>
-<html>
+<html class="{}">
 {}
 <body>
     <div>
@@ -177,6 +229,9 @@ pub fn note(dir: &str, note: &str, md_contents: &str) -> String {
 </body>
 </html>
 "#,
-        front_matter(&note_title), md_as_html, actions_str
+        if darktheme { "dark" } else { "" },
+        front_matter(&note_title),
+        md_as_html,
+        actions_str
     )
 }

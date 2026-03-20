@@ -1,21 +1,23 @@
 use axum::{
     Router,
-    extract::{Path, State, Query},
+    extract::{Path, Query, State},
     http::{
         StatusCode,
         header::{self, HeaderMap},
     },
-    response::{Html, Response},
-    routing::{get, post},
+    response::{IntoResponse, Response},
+    routing::{delete, get, post},
 };
 
+use axum_extra::extract::cookie::{Cookie, CookieJar};
+
+use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
-use serde::Deserialize;
 
 mod config;
-mod utils;
 mod rendering;
+mod utils;
 
 use noteserver::auth;
 
@@ -43,6 +45,8 @@ async fn main() {
 
     // TODO: delete
     let app = Router::new()
+        .route("/token/{tok}", post(post_token))
+        .route("/token/{tok}", delete(delete_token))
         .route("/{dir}", post(post_dir))
         .route("/{dir}/{note}", post(post_note))
         .route("/{dir}", get(get_dir))
@@ -71,8 +75,13 @@ fn valid_auth(headers: &HeaderMap) -> bool {
     }
 }
 
-// TODO: secure routes with auth
+#[derive(Deserialize)]
+struct DirDetails {
+    protected: Option<bool>,
+}
+
 async fn post_dir(
+    Query(query): Query<DirDetails>,
     Path(dir): Path<String>,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
@@ -81,10 +90,10 @@ async fn post_dir(
     if !valid_auth(&headers) {
         return StatusCode::UNAUTHORIZED;
     }
-    utils::create_dir(&state.db_pool, dir, body).await
+    let protected = query.protected.unwrap_or(false);
+    utils::create_dir(&state.db_pool, dir, body, protected).await
 }
 
-// TODO: secure routes with auth
 async fn post_note(
     Path((dir, id)): Path<(String, String)>,
     headers: HeaderMap,
@@ -97,20 +106,111 @@ async fn post_note(
     utils::create_note(&state.db_pool, dir, id, body).await
 }
 
-async fn get_dir(Path(dir): Path<String>, State(state): State<Arc<AppState>>) -> Html<String> {
-    utils::get_dir(&state.db_pool, dir).await
+#[derive(Deserialize)]
+struct PostTokenQuery {
+    directory: String,
+}
+
+async fn post_token(
+    Query(query): Query<PostTokenQuery>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    utils::create_token(&state.db_pool, token, query.directory).await
+}
+
+async fn delete_token(
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    utils::delete_token(&state.db_pool, token).await
+}
+
+fn get_cookie_from_jar(jar: &CookieJar, cookie_name: &str) -> Option<String> {
+    let cookie_gotten = jar.get(cookie_name).cloned();
+    cookie_gotten.map(|cookie| cookie.value().to_string())
+}
+
+fn get_token_cookie_name(dir: &str) -> String {
+    format!("tok-{}", dir)
+}
+
+fn is_dark_theme(jar: &CookieJar) -> bool {
+    let darktheme = get_cookie_from_jar(jar, "theme").unwrap_or(String::from("light"));
+    darktheme == "dark"
 }
 
 #[derive(Deserialize)]
-struct NoteRaw {
-    raw: Option<bool>
+struct GetDirQuery {
+    tok: Option<String>,
+}
+
+async fn get_dir(
+    Query(query): Query<GetDirQuery>,
+    Path(dir): Path<String>,
+    jar: CookieJar,
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let token_cookie_name = get_token_cookie_name(&dir);
+    if let Some(tok) = &query.tok {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::LOCATION, format!("/{}", dir).parse().unwrap());
+        return (
+            StatusCode::TEMPORARY_REDIRECT,
+            headers,
+            jar.add(Cookie::new(token_cookie_name.clone(), tok.clone())),
+        )
+            .into_response();
+    };
+    let tok = get_cookie_from_jar(&jar, &token_cookie_name);
+    let use_dark = is_dark_theme(&jar);
+    (
+        jar,
+        utils::get_dir(&state.db_pool, dir, tok, use_dark).await,
+    )
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct GetNoteQuery {
+    raw: Option<bool>,
+    theme: Option<String>,
 }
 
 async fn get_note(
-    q: Query<NoteRaw>,
+    Query(query): Query<GetNoteQuery>,
     Path((dir, id)): Path<(String, String)>,
+    jar: CookieJar,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    let raw = q.0.raw.unwrap_or(false);
-    utils::get_note(&state.db_pool, dir, id, raw).await
+    let raw = query.raw.unwrap_or(false);
+    if let Some(theme) = &query.theme {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::LOCATION,
+            format!("/{}/{}", dir, id).parse().unwrap(),
+        );
+        return (
+            StatusCode::TEMPORARY_REDIRECT,
+            headers,
+            jar.add(Cookie::new("theme", theme.clone())),
+        )
+            .into_response();
+    };
+    let token_cookie_name = get_token_cookie_name(&dir);
+    let tok = get_cookie_from_jar(&jar, &token_cookie_name);
+    let use_dark = is_dark_theme(&jar);
+    (
+        jar,
+        utils::get_note(&state.db_pool, dir, id, raw, tok, use_dark).await,
+    )
+        .into_response()
 }

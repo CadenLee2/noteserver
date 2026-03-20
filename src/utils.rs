@@ -1,19 +1,25 @@
 use axum::http::StatusCode;
-use axum::response::{Html, Response, IntoResponse};
+use axum::response::{Html, IntoResponse, Response};
 
 use crate::rendering;
 
-pub async fn create_dir(pool: &sqlx::PgPool, id: String, description: String) -> StatusCode {
+pub async fn create_dir(
+    pool: &sqlx::PgPool,
+    id: String,
+    description: String,
+    protected: bool,
+) -> StatusCode {
     match sqlx::query!(
         r#"
         INSERT INTO directory
-        (id, description)
-        VALUES ($1, $2)
+        (id, description, protected)
+        VALUES ($1, $2, $3)
         ON CONFLICT (id) DO UPDATE
-        SET description = EXCLUDED.description;
+        SET description = EXCLUDED.description, protected = EXCLUDED.protected;
     "#,
         id,
         description,
+        protected,
     )
     .fetch_all(pool)
     .await
@@ -49,6 +55,40 @@ pub async fn create_note(
     }
 }
 
+pub async fn create_token(pool: &sqlx::PgPool, token: String, dir: String) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        INSERT INTO token
+        (unlocks_directory_id, tok)
+        VALUES ($1, $2);
+    "#,
+        dir,
+        token,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn delete_token(pool: &sqlx::PgPool, token: String) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        DELETE FROM token
+        WHERE tok = $1;
+    "#,
+        token,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
 // TODO: move to types
 struct NoteMetadata {
     id: String,
@@ -58,16 +98,16 @@ struct NoteContents {
 }
 struct DirectoryMetadata {
     description: Option<String>,
+    protected: Option<bool>,
 }
 
-pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
-    let dir_data = match sqlx::query_as!(
-        DirectoryMetadata,
+async fn is_valid_token(pool: &sqlx::PgPool, dir: &str, token: &str) -> bool {
+    let token_info = match sqlx::query!(
         r#"
-        SELECT description
-        FROM directory
-        WHERE id = $1
+        SELECT FROM token
+        WHERE tok = $1 AND unlocks_directory_id = $2
     "#,
+        token,
         dir,
     )
     .fetch_all(pool)
@@ -75,52 +115,123 @@ pub async fn get_dir(pool: &sqlx::PgPool, dir: String) -> Html<String> {
     {
         // TODO: refactor this to "or error page"
         Ok(rows) => rows,
-        Err(_) => return Html(rendering::error_page("Error fetching directory")),
+        Err(_) => return false,
     };
+    !token_info.is_empty()
+}
 
-    if dir_data.is_empty() {
-        return Html(rendering::error_page("Directory not found"));
-    }
-
-    let notes = match sqlx::query_as!(
-        NoteMetadata,
+async fn get_dir_metadata(pool: &sqlx::PgPool, dir: &str) -> Option<DirectoryMetadata> {
+    sqlx::query_as!(
+        DirectoryMetadata,
         r#"
-        SELECT id
-        FROM note
-        WHERE directory_id = $1;
+        SELECT description, protected
+        FROM directory
+        WHERE id = $1
     "#,
         dir,
     )
-    .fetch_all(pool)
+    .fetch_one(pool)
     .await
-    {
+    .ok()
+}
+
+pub async fn get_dir(
+    pool: &sqlx::PgPool,
+    dir: String,
+    token: Option<String>,
+    darktheme: bool,
+) -> Html<String> {
+    let (dir_metadata_res, note_query_res) = tokio::join!(
+        get_dir_metadata(pool, &dir),
+        sqlx::query_as!(
+            NoteMetadata,
+            r#"
+            SELECT id
+            FROM note
+            WHERE directory_id = $1;
+        "#,
+            dir,
+        )
+        .fetch_all(pool)
+    );
+
+    let target_dir = match dir_metadata_res {
+        Some(res) => res,
+        None => return Html(rendering::error_page("Directory not found")),
+    };
+
+    let valid_auth = if target_dir.protected.unwrap_or(false) {
+        match token {
+            Some(tok) => is_valid_token(pool, &dir, &tok).await,
+            None => false,
+        }
+    } else {
+        true
+    };
+
+    if !valid_auth {
+        return Html(rendering::error_page("Directory not found"));
+    }
+
+    let notes = match note_query_res {
         Ok(rows) => rows,
         Err(_) => return Html(rendering::error_page("Directory not found")),
     };
 
-    // TODO: also get description from dir table
-
     let mut note_titles = notes.iter().map(|n| n.id.clone()).collect::<Vec<String>>();
     note_titles.sort();
 
-    let description = &dir_data[0].description;
-    Html(rendering::directory(&dir, &note_titles, description))
+    let description = &target_dir.description;
+    Html(rendering::directory(
+        &dir,
+        &note_titles,
+        description,
+        darktheme,
+    ))
 }
 
-pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String, raw: bool) -> Response {
-    let note_contents = match sqlx::query_as!(
-        NoteContents,
-        r#"
-        SELECT md_contents
-        FROM note
-        WHERE directory_id = $1 AND id = $2;
-    "#,
-        dir,
-        note,
-    )
-    .fetch_one(pool)
-    .await
-    {
+pub async fn get_note(
+    pool: &sqlx::PgPool,
+    dir: String,
+    note: String,
+    raw: bool,
+    token: Option<String>,
+    darktheme: bool,
+) -> Response {
+    let (dir_metadata_res, note_query_res) = tokio::join!(
+        get_dir_metadata(pool, &dir),
+        sqlx::query_as!(
+            NoteContents,
+            r#"
+            SELECT md_contents
+            FROM note
+            WHERE directory_id = $1 AND id = $2;
+        "#,
+            dir,
+            note,
+        )
+        .fetch_one(pool)
+    );
+
+    let target_dir = match dir_metadata_res {
+        Some(res) => res,
+        None => return Html(rendering::error_page("Note not found")).into_response(),
+    };
+
+    let valid_auth = if target_dir.protected.unwrap_or(false) {
+        match token {
+            Some(tok) => is_valid_token(pool, &dir, &tok).await,
+            None => false,
+        }
+    } else {
+        true
+    };
+
+    if !valid_auth {
+        return Html(rendering::error_page("Note not found")).into_response();
+    }
+
+    let note_contents = match note_query_res {
         Ok(rows) => rows,
         Err(_) => return Html(rendering::error_page("Note not found")).into_response(),
     };
@@ -128,6 +239,12 @@ pub async fn get_note(pool: &sqlx::PgPool, dir: String, note: String, raw: bool)
     if raw {
         note_contents.md_contents.into_response()
     } else {
-        Html(rendering::note(&dir, &note, &note_contents.md_contents)).into_response()
+        Html(rendering::note(
+            &dir,
+            &note,
+            &note_contents.md_contents,
+            darktheme,
+        ))
+        .into_response()
     }
 }
