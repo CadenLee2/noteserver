@@ -39,12 +39,14 @@ async fn main() {
 
     let state = Arc::new(AppState { db_pool: pool });
 
-    // TODO: delete
     let app = Router::new()
         .route("/token/{tok}", post(post_token))
         .route("/token/{tok}", delete(delete_token))
+        .route("/all", get(get_all))
         .route("/{dir}", post(post_dir))
         .route("/{dir}/{note}", post(post_note))
+        .route("/{dir}", delete(delete_dir))
+        .route("/{dir}/{note}", delete(delete_note))
         .route("/", get(get_root))
         .route("/{dir}", get(get_dir))
         .route("/{dir}/", get(get_dir))
@@ -119,6 +121,35 @@ async fn delete_token(
         return StatusCode::UNAUTHORIZED;
     }
     actions::delete_token(&state.db_pool, token).await
+}
+
+async fn delete_dir(
+    Path(dir): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !utils::valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    actions::delete_dir(&state.db_pool, dir).await
+}
+
+async fn delete_note(
+    Path((dir, id)): Path<(String, String)>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    if !utils::valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    actions::delete_note(&state.db_pool, dir, id).await
+}
+
+async fn get_all(headers: HeaderMap, State(state): State<Arc<AppState>>) -> Response {
+    if !utils::valid_auth(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    actions::get_all_admin(&state.db_pool).await.into_response()
 }
 
 async fn get_root() -> Response {

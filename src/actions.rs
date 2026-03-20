@@ -89,6 +89,78 @@ pub async fn delete_token(pool: &sqlx::PgPool, token: String) -> StatusCode {
     }
 }
 
+pub async fn delete_dir(pool: &sqlx::PgPool, dir: String) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        DELETE FROM directory
+        WHERE id = $1;
+    "#,
+        dir,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn delete_note(pool: &sqlx::PgPool, dir: String, id: String) -> StatusCode {
+    match sqlx::query!(
+        r#"
+        DELETE FROM note
+        WHERE directory_id = $1 AND id = $2;
+    "#,
+        dir,
+        id,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+struct DirectoryAdminResponse {
+    id: String,
+    protected: Option<bool>,
+    notes_in_dir: Option<i64>,
+}
+
+pub async fn get_all_admin(pool: &sqlx::PgPool) -> String {
+    let rows = match sqlx::query_as!(
+        DirectoryAdminResponse,
+        r#"
+        SELECT directory.id, protected, COUNT(note.id) AS notes_in_dir
+        FROM directory
+        LEFT JOIN note ON note.directory_id = directory.id
+        GROUP BY directory.id;
+    "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return String::from("Error"),
+    };
+
+    rows.iter()
+        .map(|r| {
+            format!(
+                "DIRECTORY {} | {} notes | {}\n",
+                r.id,
+                r.notes_in_dir.unwrap_or(0),
+                if r.protected.unwrap_or(false) {
+                    "protected"
+                } else {
+                    "-"
+                },
+            )
+        })
+        .collect::<String>()
+}
+
 struct NoteMetadata {
     id: String,
 }
