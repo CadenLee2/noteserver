@@ -2,7 +2,8 @@
 
 A tool for self-hosting my markdown notes!
 
-This project is still in progress.
+![A screenshot of an example document](examples/Screenshot.png)
+*Visit <https://notes.cadenlee.dev/misc/example> for an example!*
 
 ## Usage
 ### As a user
@@ -18,7 +19,10 @@ Every note is inside a directory.
 - To add a note, `POST` `/{directory}/{note}`. The directory must exist. Pass:
     - The Markdown contents as the body
     - Your authorization as a header
-- Documentation coming soon
+- Feel free to use the admin tool (`/scripts/noteadmin.py`) to simplify tasks! The tool supports:
+    - Bulk uploading from a folder on your computer
+    - Managing directories/notes
+    - Managing tokens
 
 ## Development
 - Copy `.env.example` into `.env`
@@ -26,7 +30,3 @@ Every note is inside a directory.
     - A utility is provided for hashing your password
 - `cargo run`
     - The database schema will be populated at build time
-
-## Motivations
-
-Curious? Read [my thoughts on digital notes](https://cadenlee.dev/blog/defense_of_digital).
