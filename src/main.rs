@@ -15,6 +15,7 @@ use std::sync::Arc;
 mod actions;
 mod config;
 mod rendering;
+mod styling;
 mod utils;
 
 #[derive(Clone)]
