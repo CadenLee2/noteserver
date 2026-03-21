@@ -128,27 +128,48 @@ struct DirectoryAdminResponse {
     notes_in_dir: Option<i64>,
 }
 
+struct Token {
+    tok: String,
+    unlocks_directory_id: Option<String>,
+}
+
 pub async fn get_all_admin(pool: &sqlx::PgPool) -> String {
-    let rows = match sqlx::query_as!(
-        DirectoryAdminResponse,
-        r#"
+    let (dir_resp, token_resp) = tokio::join!(
+        sqlx::query_as!(
+            DirectoryAdminResponse,
+            r#"
         SELECT directory.id, protected, COUNT(note.id) AS notes_in_dir
         FROM directory
         LEFT JOIN note ON note.directory_id = directory.id
         GROUP BY directory.id;
     "#
-    )
-    .fetch_all(pool)
-    .await
-    {
+        )
+        .fetch_all(pool),
+        sqlx::query_as!(
+            Token,
+            r#"
+        SELECT tok, unlocks_directory_id
+        FROM token;
+    "#
+        )
+        .fetch_all(pool)
+    );
+
+    let dirs = match dir_resp {
         Ok(rows) => rows,
-        Err(_) => return String::from("Error"),
+        Err(_) => return String::from("Error fetching dirs"),
     };
 
-    rows.iter()
+    let tokens = match token_resp {
+        Ok(rows) => rows,
+        Err(_) => return String::from("Error fetching tokens"),
+    };
+
+    let dirs_disp = dirs
+        .iter()
         .map(|r| {
             format!(
-                "DIRECTORY {} | {} notes | {}\n",
+                "/{} | {} notes | {}\n",
                 r.id,
                 r.notes_in_dir.unwrap_or(0),
                 if r.protected.unwrap_or(false) {
@@ -158,7 +179,22 @@ pub async fn get_all_admin(pool: &sqlx::PgPool) -> String {
                 },
             )
         })
-        .collect::<String>()
+        .collect::<String>();
+
+    let tokens_disp = tokens
+        .iter()
+        .map(|t| {
+            format!(
+                "{} | unlocks /{}\n",
+                t.tok,
+                t.unlocks_directory_id
+                    .clone()
+                    .unwrap_or(String::from("(none)"))
+            )
+        })
+        .collect::<String>();
+
+    format!("Directories:\n{}\n\nTokens:\n{}", dirs_disp, tokens_disp)
 }
 
 struct NoteMetadata {

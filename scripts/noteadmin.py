@@ -10,12 +10,16 @@ def help():
     print('Commands:')
     print('- q                                       | Exit')
     print('- help                                    | Print commands list')
-    print('- ls                                      | List all directories')
+    print('- ls                                      | List all directories and tokens')
+    print('File management:')
     print('- post {dir_id}/{note_id} {localfile.md}  | Add note from local file')
     print('- post-bulk {dir_id} {localfoldername}    | Post all markdown files inside a given folder')
     print('- post-dir {dir_id}                       | Update directory info')
     print('- delete! {dir_id}/{note_id}              | Delete a note')
     print('- delete-dir! {dir_id}                    | Delete a directory')
+    print('Token management:')
+    print('- post-tok {dir_id}                       | Create a token for a directory')
+    print('- delete-tok! {tok}                       | Delete a token')
     print();
 
 def read_file(path):
@@ -94,6 +98,15 @@ while True:
         elif (args[0] == 'delete-dir!'):
             remote_dir = args[1]
             resp = requests.delete(NOTESERVER_URL + '/' + remote_dir, headers=auth_headers)
+            print(resp.status_code)
+        elif (args[0] == 'post-tok'):
+            remote_dir = args[1]
+            tok = input('Enter token: ')
+            resp = requests.post(NOTESERVER_URL + '/token/' + tok + '?directory=' + remote_dir, headers=auth_headers)
+            print(resp.status_code)
+        elif (args[0] == 'delete-tok!'):
+            tok = args[1]
+            resp = requests.delete(NOTESERVER_URL + '/token/' + tok, headers=auth_headers)
             print(resp.status_code)
         else:
             print('Invalid command')
