@@ -67,6 +67,7 @@ a:hover {
 pre, code {
     background-color: var(--bg-pre);
     color: var(--text-pre);
+    font-size: 16px;
 }
 
 pre {

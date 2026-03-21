@@ -11,6 +11,8 @@ fn front_matter(title: &str, descr: Option<&str>) -> String {
 <head>
 <title>{}</title>
 <meta property="og:title" content="{}" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 {}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora">
 <style>
