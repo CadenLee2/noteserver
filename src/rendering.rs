@@ -1,5 +1,7 @@
 use crate::styling::STYLE_RULES;
 
+use crate::actions::NoteData;
+
 fn front_matter(title: &str, descr: Option<&str>) -> String {
     let descr_elem = match descr {
         Some(d) => format!("<meta property=\"og:description\" content=\"{}\" />", d),
@@ -22,6 +24,20 @@ fn front_matter(title: &str, descr: Option<&str>) -> String {
 "#,
         title, title, descr_elem, STYLE_RULES
     )
+}
+
+fn title_from_contents(md: &str, fallback: String) -> String {
+    let first_line = md.lines().next();
+    match first_line {
+        Some(contents) => {
+            if contents.starts_with("# ") {
+                contents.chars().skip(2).collect::<String>()
+            } else {
+                contents.to_string()
+            }
+        }
+        None => fallback,
+    }
 }
 
 pub fn error_page(error: &str) -> String {
@@ -67,7 +83,7 @@ pub fn root() -> String {
 
 pub fn directory(
     dir: &str,
-    note_titles: &[String],
+    notes: &[NoteData],
     description: Option<&str>,
     darktheme: bool,
 ) -> String {
@@ -100,9 +116,17 @@ pub fn directory(
         );
     }
 
-    let note_list = note_titles
+    let note_list = notes
         .iter()
-        .map(|n| format!("<li><a href=\"/{}/{}\">{}</a></li>", dir, n, n))
+        .map(|n| {
+            format!(
+                "<li><a title=\"{}\" href=\"/{}/{}\">{}</a></li>",
+                n.id,
+                dir,
+                n.id,
+                title_from_contents(&n.md_contents, n.id.clone())
+            )
+        })
         .collect::<String>();
 
     format!(
@@ -140,7 +164,8 @@ fn to_valid_descr_char(c: char) -> char {
 }
 
 fn descr_from_contents(md_contents: &str) -> String {
-    let start = md_contents
+    let after_first_line = md_contents.lines().skip(1).collect::<String>();
+    let start = after_first_line
         .chars()
         .take(60)
         .map(to_valid_descr_char)
@@ -155,8 +180,6 @@ fn descr_from_contents(md_contents: &str) -> String {
 pub fn note(dir: &str, note: &str, md_contents: &str, darktheme: bool) -> String {
     let md_as_html =
         markdown::to_html_with_options(md_contents, &markdown::Options::gfm()).unwrap();
-
-    let note_title = format!("{} ({})", note, dir);
 
     let mut actions: Vec<String> = Vec::new();
     if dir != MISC_DIR_ID {
@@ -178,6 +201,7 @@ pub fn note(dir: &str, note: &str, md_contents: &str, darktheme: bool) -> String
 
     let actions_str = actions.iter().map(|o| o.to_string()).collect::<String>();
 
+    let note_title = title_from_contents(md_contents, note.to_string());
     let note_descr = descr_from_contents(md_contents);
 
     format!(

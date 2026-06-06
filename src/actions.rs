@@ -197,8 +197,9 @@ pub async fn get_all_admin(pool: &sqlx::PgPool) -> String {
     format!("Directories:\n{}\n\nTokens:\n{}", dirs_disp, tokens_disp)
 }
 
-struct NoteMetadata {
-    id: String,
+pub struct NoteData {
+    pub id: String,
+    pub md_contents: String,
 }
 struct NoteContents {
     md_contents: String,
@@ -208,13 +209,18 @@ struct DirectoryMetadata {
     protected: Option<bool>,
 }
 
-async fn is_valid_token(pool: &sqlx::PgPool, dir: &str, token: &str) -> bool {
+async fn is_valid_token(pool: &sqlx::PgPool, dir: &str, token: Option<&String>) -> bool {
+    let tok = match token {
+        Some(tok) => tok,
+        None => return false,
+    };
+
     let token_info = match sqlx::query!(
         r#"
         SELECT FROM token
         WHERE tok = $1 AND unlocks_directory_id = $2
     "#,
-        token,
+        tok,
         dir,
     )
     .fetch_all(pool)
@@ -252,18 +258,19 @@ pub async fn get_dir(
     darktheme: bool,
 ) -> Html<String> {
     const DIR_ERROR: &str = "Directory not found";
-    let (dir_metadata_res, note_query_res) = tokio::join!(
+    let (dir_metadata_res, note_query_res, valid_token) = tokio::join!(
         get_dir_metadata(pool, &dir),
         sqlx::query_as!(
-            NoteMetadata,
+            NoteData,
             r#"
-            SELECT id
+            SELECT id, md_contents
             FROM note
             WHERE directory_id = $1;
         "#,
             dir,
         )
-        .fetch_all(pool)
+        .fetch_all(pool),
+        is_valid_token(pool, &dir, token.as_ref()),
     );
 
     let target_dir = match dir_metadata_res {
@@ -271,34 +278,21 @@ pub async fn get_dir(
         None => return Html(rendering::error_page(DIR_ERROR)),
     };
 
-    let valid_auth = if target_dir.protected.unwrap_or(false) {
-        match token {
-            Some(tok) => is_valid_token(pool, &dir, &tok).await,
-            None => false,
-        }
-    } else {
-        true
-    };
+    let valid_auth = !target_dir.protected.unwrap_or(false) || valid_token;
 
     if !valid_auth {
         return Html(rendering::error_page(DIR_ERROR));
     }
 
-    let notes = match note_query_res {
+    let mut notes = match note_query_res {
         Ok(rows) => rows,
         Err(_) => return Html(rendering::error_page(DIR_ERROR)),
     };
 
-    let mut note_titles = notes.iter().map(|n| n.id.clone()).collect::<Vec<String>>();
-    note_titles.sort();
+    notes.sort_by_key(|f| f.id.clone());
 
     let description = target_dir.description.as_deref();
-    Html(rendering::directory(
-        &dir,
-        &note_titles,
-        description,
-        darktheme,
-    ))
+    Html(rendering::directory(&dir, &notes, description, darktheme))
 }
 
 pub async fn get_note(
@@ -311,7 +305,7 @@ pub async fn get_note(
 ) -> Response {
     const NOTE_ERROR: &str = "Note not found";
 
-    let (dir_metadata_res, note_query_res) = tokio::join!(
+    let (dir_metadata_res, note_query_res, valid_token) = tokio::join!(
         get_dir_metadata(pool, &dir),
         sqlx::query_as!(
             NoteContents,
@@ -323,7 +317,8 @@ pub async fn get_note(
             dir,
             note,
         )
-        .fetch_one(pool)
+        .fetch_one(pool),
+        is_valid_token(pool, &dir, token.as_ref()),
     );
 
     let target_dir = match dir_metadata_res {
@@ -331,14 +326,7 @@ pub async fn get_note(
         None => return Html(rendering::error_page(NOTE_ERROR)).into_response(),
     };
 
-    let valid_auth = if target_dir.protected.unwrap_or(false) {
-        match token {
-            Some(tok) => is_valid_token(pool, &dir, &tok).await,
-            None => false,
-        }
-    } else {
-        true
-    };
+    let valid_auth = !target_dir.protected.unwrap_or(false) || valid_token;
 
     if !valid_auth {
         return Html(rendering::error_page(NOTE_ERROR)).into_response();

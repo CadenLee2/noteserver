@@ -73,6 +73,7 @@ pre, code {
 pre {
     border-radius: 4px;
     padding: 4px 8px;
+    overflow: scroll;
 }
 
 code {

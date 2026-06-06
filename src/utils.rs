@@ -19,6 +19,7 @@ pub fn make_expiring_cookie<'a>(name: &str, val: &str) -> Cookie<'a> {
     Cookie::build((name.to_string(), val.to_string()))
         .expires(expires_at)
         .http_only(true)
+        .path("/")
         .build()
 }
 
